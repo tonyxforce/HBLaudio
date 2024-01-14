@@ -1,0 +1,1 @@
+C:\Users\domi\.platformio\penv\Scripts\platformio.exe run --target upload --environment esp32dev --upload-port

@@ -1,0 +1,14 @@
+{
+    "files.associations": {
+        "*.json": "jsonc",
+        "array": "cpp",
+        "*.tcc": "cpp",
+        "memory": "cpp",
+        "istream": "cpp",
+        "functional": "cpp",
+        "tuple": "cpp",
+        "utility": "cpp",
+        "variant": "cpp",
+        "cmath": "cpp"
+    }
+}

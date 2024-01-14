@@ -1,0 +1,1 @@
+C:\Users\domi\.platformio\penv\Scripts\platformio.exe device monitor --environment esp32dev --port COM8
