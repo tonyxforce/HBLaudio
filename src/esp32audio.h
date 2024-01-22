@@ -12,6 +12,7 @@
 #include <BluetoothA2DPSink.h>
 #include <Preferences.h>
 #include "BluetoothSerial.h"
-#include <Adafruit_NeoPixel.h>
+//#include <Adafruit_NeoPixel.h>
+
 
 #include "secrets.h"
