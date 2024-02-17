@@ -1,5 +1,15 @@
-#include <esp32audio.h>
-#include "const.h"
+#include <Arduino.h>
+
+#include <HardwareSerial.h> // ensure we have the correct "Serial" on new MCUs (depends on ARDUINO_USB_MODE and ARDUINO_USB_CDC_ON_BOOT)
+
+#include <WiFi.h>
+#include <ESPmDNS.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
+
+#include <BluetoothA2DPSink.h>
+#include <Preferences.h>
+#include "BluetoothSerial.h"
 
 BluetoothA2DPSink a2dp_sink;
 Preferences preferences;
@@ -48,17 +58,23 @@ void avrc_metadata_callback(uint8_t id, const uint8_t *text)
 }
 
 #define pairBtn 15
+unsigned long lastSend = 0;
 
 void volumeChange(int newVolume)
 {
+  while(millis() - lastSend < 10) yield();
+  lastSend = millis();
   // pixels.setBrightness(newVolume * 2);
   // pixels.show();
-  Serial2.println("6" + String(newVolume));
-  volume = newVolume;
   log("update: ");
   log(newVolume);
   log(", scaled:");
   logln(map(newVolume, 0, 127, 0, 150));
+  if (abs(newVolume - volume) > 10 || newVolume > 120)
+  {
+    Serial2.println("6" + String(newVolume));
+  }
+  volume = newVolume;
 }
 
 void setup()
@@ -141,7 +157,6 @@ void loop()
     Serial.println("Stopped pairing!");
   }
 
-
   if (isConnected != a2dp_sink.get_connection_state())
   {
     isConnected = a2dp_sink.get_connection_state();
@@ -150,7 +165,7 @@ void loop()
     {
     case ESP_A2D_CONNECTION_STATE_DISCONNECTED:
       logln("Disconnected!");
-      Serial2.println("15");
+      Serial2.println("9");
       statusLedState = 0;
       break;
 
@@ -161,7 +176,7 @@ void loop()
       break;
 
     case ESP_A2D_CONNECTION_STATE_CONNECTED:
-      Serial2.println("13");
+      Serial2.println("8");
 
       a2dp_sink.set_discoverability(ESP_BT_NON_DISCOVERABLE);
 
@@ -201,12 +216,13 @@ void loop()
         ESP.restart();
         break;
       case 's':
-        Serial2.println(SerialBT.readStringUntil('\n'));
-      break;
+        String input = SerialBT.readStringUntil('\n');
+        Serial2.println(input);
+        logln(input);
+        break;
       }
 
       SerialBT.readString();
-
     }
 
     Serial2.println();
