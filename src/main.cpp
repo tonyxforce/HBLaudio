@@ -21,6 +21,12 @@ BluetoothSerial SerialBT;
 int isConnected = 0;
 int volume = 0;
 
+#define POWRBTN 33
+#define BUTTON_PIN_BITMASK 0x200000000 // 2^33 in hex
+
+#define pairBtn 15
+#define SWITCH 23
+
 uint8_t r;
 uint8_t g;
 uint8_t b;
@@ -57,12 +63,12 @@ void avrc_metadata_callback(uint8_t id, const uint8_t *text)
   }
 }
 
-#define pairBtn 15
 unsigned long lastSend = 0;
 
 void volumeChange(int newVolume)
 {
-  while(millis() - lastSend < 10) yield();
+  while (millis() - lastSend < 10)
+    yield();
   lastSend = millis();
   // pixels.setBrightness(newVolume * 2);
   // pixels.show();
@@ -79,16 +85,33 @@ void volumeChange(int newVolume)
 
 void setup()
 {
+
   preferences.begin("main");
   Serial.begin(115200);
   Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
   Serial.setTimeout(150);
 
   pinMode(pairBtn, INPUT_PULLUP);
+  pinMode(POWRBTN, INPUT_PULLUP);
+  pinMode(SWITCH, OUTPUT);
+  pinMode(34, INPUT_PULLUP); // dfplayer
+  digitalWrite(SWITCH, LOW);
+
+  pinMode(32, OUTPUT);
+  digitalWrite(32, HIGH);
+
+  delay(1000);
+  digitalWrite(32, LOW);
+  delay(50);
+  digitalWrite(32, HIGH);
+
+  while(digitalRead(34)){};
+  while(!digitalRead(34)){};
+  delay(3000);
+
 
   // pixels.fill(0);
   // pixels.show();
-
   String name = preferences.getString("name", "HBL partybox 3");
   SerialBT.begin(name.c_str());
   Serial.println("The device started, now you can pair it with bluetooth as " + name);
@@ -129,6 +152,7 @@ void setup()
   a2dp_sink.set_discoverability(ESP_BT_LIMITED_DISCOVERABLE);
 
   a2dp_sink.start(name.c_str());
+
 }
 
 unsigned long lastBlink = 0;
@@ -141,6 +165,20 @@ String newName;
 void loop()
 {
   now = millis();
+
+  if (!digitalRead(POWRBTN))
+  {
+    a2dp_sink.disconnect();
+    Serial2.println("a");
+    while(digitalRead(34)){};
+    while(!digitalRead(34)){};
+    digitalWrite(SWITCH, HIGH);
+    delay(1000);
+
+
+    esp_sleep_enable_ext1_wakeup(BUTTON_PIN_BITMASK, ESP_EXT1_WAKEUP_ALL_LOW);
+    esp_deep_sleep_start();
+  }
 
   if (!digitalRead(pairBtn) > isDiscoverable)
   {
