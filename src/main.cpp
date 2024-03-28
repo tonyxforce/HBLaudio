@@ -26,6 +26,10 @@ int volume = 0;
 
 #define pairBtn 15
 #define SWITCH 23
+#define MUTE 27
+#define ESP82RESET 32
+#define DFisPlaying 34
+#define ESP82INITDONE 14
 
 uint8_t r;
 uint8_t g;
@@ -36,123 +40,137 @@ uint8_t b;
 
 void avrc_metadata_callback(uint8_t id, const uint8_t *text)
 {
-  switch (id)
-  {
-  case 1:
-    // title
-    log("{\"");           //{"
-    log("title\": ");     // title":
-    logf("\"%s\"", text); //"asd"
-    log(",");             //,
-    break;
-  case 2:
-    // artist
-    log("\"artist\": ");  //"artist":
-    logf("\"%s\"", text); //"asd"
-    log(",");             //,
+	switch (id)
+	{
+	case 1:
+		// title
+		log("{\"");			  //{"
+		log("title\": ");	  // title":
+		logf("\"%s\"", text); //"asd"
+		log(",");			  //,
+		break;
+	case 2:
+		// artist
+		log("\"artist\": ");  //"artist":
+		logf("\"%s\"", text); //"asd"
+		log(",");			  //,
 
-    break;
-  case 4:
-    // album
-    log("\"album\": ");   //"album":
-    logf("\"%s\"", text); //"asd"
-    // Serial.print(",");
-    logln("}"); //}
+		break;
+	case 4:
+		// album
+		log("\"album\": ");	  //"album":
+		logf("\"%s\"", text); //"asd"
+		// Serial.print(",");
+		logln("}"); //}
 
-    break;
-  }
+		break;
+	}
 }
 
+bool firstMute = true;
+unsigned long muteStart = 0;
 unsigned long lastSend = 0;
 
 void volumeChange(int newVolume)
 {
-  while (millis() - lastSend < 10)
-    yield();
-  lastSend = millis();
-  // pixels.setBrightness(newVolume * 2);
-  // pixels.show();
-  log("update: ");
-  log(newVolume);
-  log(", scaled:");
-  logln(map(newVolume, 0, 127, 0, 150));
-  if (abs(newVolume - volume) > 10 || newVolume > 120)
-  {
-    Serial2.println("6" + String(newVolume));
-  }
-  volume = newVolume;
+	while (millis() - lastSend < 10)
+		yield();
+	lastSend = millis();
+	// pixels.setBrightness(newVolume * 2);
+	// pixels.show();
+	log("update: ");
+	log(newVolume);
+	log(", scaled:");
+	logln(map(newVolume, 0, 127, 0, 150));
+	if (abs(newVolume - volume) > 10 || newVolume > 120)
+	{
+		Serial2.println("6" + String(newVolume));
+	}
+	volume = newVolume;
 }
 
 void setup()
 {
 
-  preferences.begin("main");
-  Serial.begin(115200);
-  Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
-  Serial.setTimeout(150);
+	preferences.begin("main");
+	Serial.begin(115200);
+	Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
+	Serial.setTimeout(150);
 
-  pinMode(pairBtn, INPUT_PULLUP);
-  pinMode(POWRBTN, INPUT_PULLUP);
-  pinMode(SWITCH, OUTPUT);
-  pinMode(34, INPUT_PULLUP); // dfplayer
-  digitalWrite(SWITCH, LOW);
+	pinMode(pairBtn, INPUT_PULLUP);
+	pinMode(POWRBTN, INPUT_PULLUP);
+	pinMode(SWITCH, OUTPUT);
 
-  pinMode(32, OUTPUT);
-  digitalWrite(32, HIGH);
+	pinMode(DFisPlaying, INPUT_PULLUP); // dfplayer
 
-  delay(1000);
-  digitalWrite(32, LOW);
-  delay(50);
-  digitalWrite(32, HIGH);
+	digitalWrite(SWITCH, LOW); // turn on everything else
+	muteStart = millis();
 
-  while(digitalRead(34)){};
-  while(!digitalRead(34)){};
-  delay(3000);
+	pinMode(MUTE, OUTPUT);
+	digitalWrite(MUTE, LOW); // mute speakers
 
+	pinMode(ESP82RESET, OUTPUT);
+	digitalWrite(ESP82RESET, HIGH); // don't reset esp8266
 
-  // pixels.fill(0);
-  // pixels.show();
-  String name = preferences.getString("name", "HBL partybox 3");
-  SerialBT.begin(name.c_str());
-  Serial.println("The device started, now you can pair it with bluetooth as " + name);
+	delay(500);
+	digitalWrite(ESP82RESET, LOW);
+	delay(50);
+	digitalWrite(ESP82RESET, HIGH); // reset esp8266
+	delay(200);
+	pinMode(ESP82INITDONE, INPUT_PULLUP);
 
-  const i2s_config_t i2s_config = {
-      .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
-      .sample_rate = 44100,                         // corrected by info from bluetooth
-      .bits_per_sample = (i2s_bits_per_sample_t)16, // the DAC module will only take the 8bits from MSB
-      .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
-      .communication_format = (i2s_comm_format_t)I2S_COMM_FORMAT_STAND_MSB,
-      .intr_alloc_flags = 0, // default interrupt priority
-      .dma_buf_count = 8,
-      .dma_buf_len = 64,
-      .use_apll = false,
-      .tx_desc_auto_clear = false,
-      .fixed_mclk = false,
-  };
+	while (digitalRead(ESP82INITDONE))
+		yield(); // wait for esp8266 to be done initializing
+	pinMode(MUTE, HIGH);
 
-  const i2s_pin_config_t my_pin_config = {
-      .mck_io_num = I2S_PIN_NO_CHANGE,
-      .bck_io_num = 26,
-      .ws_io_num = 25,
-      .data_out_num = 22,
-      .data_in_num = I2S_PIN_NO_CHANGE};
+	while (digitalRead(DFisPlaying))
+		yield();
+	while (!digitalRead(DFisPlaying))
+		yield(); // wait for turnon sound
+	delay(3000);
 
-  a2dp_sink.set_pin_config(my_pin_config);
-  a2dp_sink.set_i2s_config(i2s_config);
+	// pixels.fill(0);
+	// pixels.show();
+	String name = preferences.getString("name", "HBL partybox 3");
+	SerialBT.begin(name.c_str());
+	Serial.println("The device started, now you can pair it with bluetooth as " + name);
 
-  a2dp_sink.set_avrc_metadata_callback(avrc_metadata_callback);
-  a2dp_sink.set_avrc_rn_volumechange(volumeChange);
-  a2dp_sink.set_avrc_rn_volumechange_completed(volumeChange);
-  a2dp_sink.set_on_volumechange(volumeChange);
-  a2dp_sink.set_auto_reconnect(true);
+	const i2s_config_t i2s_config = {
+		.mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
+		.sample_rate = 44100,						  // corrected by info from bluetooth
+		.bits_per_sample = (i2s_bits_per_sample_t)16, // the DAC module will only take the 8bits from MSB
+		.channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
+		.communication_format = (i2s_comm_format_t)I2S_COMM_FORMAT_STAND_MSB,
+		.intr_alloc_flags = 0, // default interrupt priority
+		.dma_buf_count = 8,
+		.dma_buf_len = 64,
+		.use_apll = false,
+		.tx_desc_auto_clear = false,
+		.fixed_mclk = false,
+	};
 
-  // ESP_BT_NON_DISCOVERABLE,            //Non-discoverable
-  // ESP_BT_LIMITED_DISCOVERABLE,        //Limited Discoverable
-  // ESP_BT_GENERAL_DISCOVERABLE,        //General Discoverable
-  a2dp_sink.set_discoverability(ESP_BT_LIMITED_DISCOVERABLE);
+	const i2s_pin_config_t my_pin_config = {
+		.mck_io_num = I2S_PIN_NO_CHANGE,
+		.bck_io_num = 26,
+		.ws_io_num = 25,
+		.data_out_num = 22,
+		.data_in_num = I2S_PIN_NO_CHANGE};
 
-  a2dp_sink.start(name.c_str());
+	a2dp_sink.set_pin_config(my_pin_config);
+	a2dp_sink.set_i2s_config(i2s_config);
 
+	a2dp_sink.set_avrc_metadata_callback(avrc_metadata_callback);
+	a2dp_sink.set_avrc_rn_volumechange(volumeChange);
+	a2dp_sink.set_avrc_rn_volumechange_completed(volumeChange);
+	a2dp_sink.set_on_volumechange(volumeChange);
+	a2dp_sink.set_auto_reconnect(true);
+
+	// ESP_BT_NON_DISCOVERABLE,            //Non-discoverable
+	// ESP_BT_LIMITED_DISCOVERABLE,        //Limited Discoverable
+	// ESP_BT_GENERAL_DISCOVERABLE,        //General Discoverable
+	a2dp_sink.set_discoverability(ESP_BT_LIMITED_DISCOVERABLE);
+
+	a2dp_sink.start(name.c_str());
 }
 
 unsigned long lastBlink = 0;
@@ -164,105 +182,110 @@ String newName;
 
 void loop()
 {
-  now = millis();
+	now = millis();
 
-  if (!digitalRead(POWRBTN))
-  {
-    a2dp_sink.disconnect();
-    Serial2.println("a");
-    while(digitalRead(34)){};
-    while(!digitalRead(34)){};
-    digitalWrite(SWITCH, HIGH);
-    delay(1000);
+	if (!digitalRead(POWRBTN))
+	{
+		a2dp_sink.disconnect();
+		Serial2.println("a");
+		while (digitalRead(DFisPlaying))yield();
+		while (!digitalRead(DFisPlaying))yield();
+		delay(1000);
 
+		pinMode(MUTE, OUTPUT);
 
-    esp_sleep_enable_ext1_wakeup(BUTTON_PIN_BITMASK, ESP_EXT1_WAKEUP_ALL_LOW);
-    esp_deep_sleep_start();
-  }
+		digitalWrite(MUTE, LOW);
+		delay(100);
+		digitalWrite(SWITCH, HIGH);
+		delay(1000);
+		digitalWrite(MUTE, HIGH);
 
-  if (!digitalRead(pairBtn) > isDiscoverable)
-  {
-    isDiscoverable = !digitalRead(pairBtn);
-    a2dp_sink.set_discoverability(ESP_BT_GENERAL_DISCOVERABLE);
-    pairStart = now;
-    Serial2.println("12");
-    Serial.println("Pairing!");
-  }
+		esp_sleep_enable_ext1_wakeup(BUTTON_PIN_BITMASK, ESP_EXT1_WAKEUP_ALL_LOW);
+		esp_deep_sleep_start();
+	}
 
-  if (now - pairStart > 15000 && isDiscoverable)
-  {
-    isDiscoverable = false;
-    Serial.println("Stopped pairing!");
-  }
+	if (!digitalRead(pairBtn) > isDiscoverable)
+	{
+		isDiscoverable = !digitalRead(pairBtn);
+		a2dp_sink.set_discoverability(ESP_BT_GENERAL_DISCOVERABLE);
+		pairStart = now;
+		Serial2.println("12");
+		Serial.println("Pairing!");
+	}
 
-  if (isConnected != a2dp_sink.get_connection_state())
-  {
-    isConnected = a2dp_sink.get_connection_state();
+	if (now - pairStart > 15000 && isDiscoverable)
+	{
+		isDiscoverable = false;
+		Serial.println("Stopped pairing!");
+	}
 
-    switch (isConnected)
-    {
-    case ESP_A2D_CONNECTION_STATE_DISCONNECTED:
-      logln("Disconnected!");
-      Serial2.println("9");
-      statusLedState = 0;
-      break;
+	if (isConnected != a2dp_sink.get_connection_state())
+	{
+		isConnected = a2dp_sink.get_connection_state();
 
-    case ESP_A2D_CONNECTION_STATE_CONNECTING:
-      Serial2.println("4");
+		switch (isConnected)
+		{
+		case ESP_A2D_CONNECTION_STATE_DISCONNECTED:
+			logln("Disconnected!");
+			Serial2.println("9");
+			statusLedState = 0;
+			break;
 
-      logln("Connecting");
-      break;
+		case ESP_A2D_CONNECTION_STATE_CONNECTING:
+			Serial2.println("4");
 
-    case ESP_A2D_CONNECTION_STATE_CONNECTED:
-      Serial2.println("8");
+			logln("Connecting");
+			break;
 
-      a2dp_sink.set_discoverability(ESP_BT_NON_DISCOVERABLE);
+		case ESP_A2D_CONNECTION_STATE_CONNECTED:
+			Serial2.println("8");
 
-      logln("Connected!");
-      statusLedState = 0;
-      break;
+			a2dp_sink.set_discoverability(ESP_BT_NON_DISCOVERABLE);
 
-    case ESP_A2D_CONNECTION_STATE_DISCONNECTING:
-      Serial2.println("7");
-      break;
-    }
-  }
-  if (Serial.available())
-  {
-    SerialBT.write(Serial.read());
-  }
+			logln("Connected!");
+			statusLedState = 0;
+			break;
 
-  if (SerialBT.available())
-  {
-    Serial2.print("5");
+		case ESP_A2D_CONNECTION_STATE_DISCONNECTING:
+			Serial2.println("7");
+			break;
+		}
+	}
+	if (Serial.available())
+	{
+		SerialBT.write(Serial.read());
+	}
 
-    while (SerialBT.available())
-    {
-      byte content = SerialBT.read();
-      Serial2.write(content);
-      Serial.write(content);
-      if (content == 0x0A || content == 0x0D)
-        return;
+	if (SerialBT.available())
+	{
+		Serial2.print("5");
 
-      switch (content)
-      {
-      case 'c':
-        newName = SerialBT.readStringUntil('\n');
-        logln("Changing name to " + newName);
-        preferences.putString("name", newName);
-        delay(1000);
-        ESP.restart();
-        break;
-      case 's':
-        String input = SerialBT.readStringUntil('\n');
-        Serial2.println(input);
-        logln(input);
-        break;
-      }
+		while (SerialBT.available())
+		{
+			byte content = SerialBT.read();
+			Serial2.write(content);
+			Serial.write(content);
+			if (content == 0x0A || content == 0x0D)
+				return;
 
-      SerialBT.readString();
-    }
+			switch (content)
+			{
+			case 'c':
+				newName = SerialBT.readStringUntil('\n');
+				logln("Changing name to " + newName);
+				preferences.putString("name", newName);
+				delay(1000);
+				ESP.restart();
+				break;
+			case 's':
+				String input = SerialBT.readStringUntil('\n');
+				Serial2.println(input);
+				logln(input);
+				break;
+			}
+			SerialBT.readString();
+		}
 
-    Serial2.println();
-  }
+		Serial2.println();
+	}
 }
