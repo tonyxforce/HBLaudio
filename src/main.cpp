@@ -119,15 +119,15 @@ void setup()
 	delay(200);
 	pinMode(ESP82INITDONE, INPUT_PULLUP);
 
-	while (digitalRead(ESP82INITDONE))
-		yield(); // wait for esp8266 to be done initializing
-	pinMode(MUTE, HIGH);
-
-	while (digitalRead(DFisPlaying))
-		yield();
-	while (!digitalRead(DFisPlaying))
-		yield(); // wait for turnon sound
-	delay(3000);
+	//while (digitalRead(ESP82INITDONE))
+	//	yield(); // wait for esp8266 to be done initializing
+	//pinMode(MUTE, HIGH);
+//
+	//while (digitalRead(DFisPlaying))
+	//	yield();
+	//while (!digitalRead(DFisPlaying))
+	//	yield(); // wait for turnon sound
+	//delay(3000);
 
 	// pixels.fill(0);
 	// pixels.show();
